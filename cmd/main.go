@@ -85,7 +85,8 @@ func init() {
 	log.Info("🚀 Cold-starting twitter-scraper-lambda")
 
 	if err := sentry.Init(sentry.ClientOptions{
-		Dsn: os.Getenv("SENTRY_DSN"),
+		Dsn:              os.Getenv("SENTRY_DSN"),
+		TracesSampleRate: 1.0,
 	}); err != nil {
 		panic(err.Error())
 	}
