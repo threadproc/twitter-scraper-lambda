@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	twv1 "github.com/dghubble/go-twitter/twitter"
+	"github.com/getsentry/sentry-go"
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	twitterscraper "github.com/threadproc/twitter-scraper-lambda"
@@ -19,6 +22,12 @@ var ginLambda *ginadapter.GinLambda
 var ts *twitterscraper.Scraper
 
 func errResponse(c *gin.Context, code int, err error) {
+	hub := sentrygin.GetHubFromContext(c)
+	if code >= 500 {
+		// we only want to capture 5xx errors here
+		hub.CaptureException(err)
+	}
+
 	log.WithError(err).Error("error in response")
 	c.JSON(code, map[string]interface{}{
 		"error": err.Error(),
@@ -75,9 +84,20 @@ func handleTweets(c *gin.Context) {
 func init() {
 	log.Info("🚀 Cold-starting twitter-scraper-lambda")
 
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn: os.Getenv("SENTRY_DSN"),
+	}); err != nil {
+		panic(err.Error())
+	}
+
 	ts = twitterscraper.NewScraper()
 
 	r := gin.Default()
+
+	r.Use(sentrygin.New(sentrygin.Options{
+		Repanic: true,
+	}))
+
 	r.GET("/tweet", handleTweets)
 	r.GET("/user", func(c *gin.Context) {
 		c.String(200, "get user")
